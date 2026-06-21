@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Monitor Ybera — Plataforma para Gestoras</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --gold: #C8956C;
+    --gold-light: #D4AA80;
+    --gold-dark: #8B6340;
+    --bg: #0F0806;
+    --bg2: #1A0F08;
+    --bg3: #160D06;
+    --text: #FFF8F0;
+    --text-muted: rgba(255,248,240,0.5);
+    --border: rgba(200,149,108,0.18);
+    --border-hover: rgba(200,149,108,0.4);
+    --card: rgba(255,248,240,0.04);
+    --card-hover: rgba(200,149,108,0.1);
+    --success: #4CAF50;
+    --error: #FF6B35;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--gold-dark); border-radius: 2px; }
+  body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; min-height: 100vh; }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  @keyframes shimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
+
+  .screen { display: none; min-height: 100vh; animation: fadeIn 0.4s ease; }
+  .screen.active { display: block; }
+
+  /* ===== AUTH SCREEN ===== */
+  #auth-screen {
+    background: radial-gradient(ellipse at 30% 20%, rgba(200,149,108,0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 70% 80%, rgba(139,99,64,0.06) 0%, transparent 50%),
+                linear-gradient(160deg, #1A0F08 0%, #0F0806 50%, #160D06 100%);
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .auth-box {
+    width: 100%; max-width: 400px;
+    background: rgba(255,248,240,0.03);
+    border: 1px solid var(--border);
+    border-radius: 24px; padding: 40px 36px;
+    backdrop-filter: blur(12px);
+  }
+  .auth-logo { text-align: center; margin-bottom: 32px; }
+  .auth-logo .crown { font-size: 36px; margin-bottom: 8px; }
+  .auth-logo h1 { font-family: 'Playfair Display', serif; font-size: 28px; color: var(--text); }
+  .auth-logo h1 span { color: var(--gold); }
+  .auth-logo p { font-size: 12px; color: var(--text-muted); margin-top: 4px; letter-spacing: 2px; text-transform: uppercase; }
+  .auth-tabs { display: flex; gap: 0; margin-bottom: 28px; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .auth-tab { flex: 1; padding: 10px; text-align: center; font-size: 13px; cursor: pointer; transition: all 0.2s; color: var(--text-muted); background: none; border: none; font-family: 'DM Sans', sans-serif; }
+  .auth-tab.active { background: var(--gold); color: #1A0F08; font-weight: 600; }
+  .form-group { margin-bottom: 16px; }
+  .form-group label { display: block; font-size: 11px; color: var(--gold); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 6px; }
+  .form-group input { width: 100%; background: rgba(255,248,240,0.05); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; color: var(--text); font-size: 14px; font-family: 'DM Sans', sans-serif; outline: none; transition: border-color 0.2s; }
+  .form-group input:focus { border-color: var(--gold); }
+  .form-group input::placeholder { color: var(--text-muted); }
+  .btn-primary { width: 100%; background: var(--gold); border: none; border-radius: 12px; padding: 14px; color: #1A0F08; font-size: 14px; font-weight: 600; font-family: 'DM Sans', sans-serif; cursor: pointer; transition: all 0.2s; margin-top: 8px; }
+  .btn-primary:hover { background: var(--gold-light); transform: translateY(-1px); }
+  .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+  .auth-message { margin-top: 12px; padding: 10px 14px; border-radius: 10px; font-size: 12px; text-align: center; display: none; }
+  .auth-message.error { background: rgba(255,107,53,0.1); border: 1px solid rgba(255,107,53,0.3); color: var(--error); display: block; }
+  .auth-message.success { background: rgba(76,175,80,0.1); border: 1px solid rgba(76,175,80,0.3); color: var(--success); display: block; }
+  .trial-badge { background: rgba(200,149,108,0.1); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; text-align: center; margin-bottom: 20px; font-size: 12px; color: var(--gold); }
+
+  /* ===== APP LAYOUT ===== */
+  #app-screen { display: none; flex-direction: column; min-height: 100vh; max-width: 480px; margin: 0 auto; }
+  #app-screen.active { display: flex; }
+
+  .app-header { padding: 48px 20px 16px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: rgba(15,8,6,0.95); backdrop-filter: blur(12px); z-index: 10; }
+  .header-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+  .header-brand .label { font-size: 9px; letter-spacing: 3px; color: rgba(200,149,108,0.6); text-transform: uppercase; margin-bottom: 3px; }
+  .header-brand h1 { font-family: 'Playfair Display', serif; font-size: 24px; font-weight: 700; line-height: 1.1; }
+  .header-brand h1 span { color: var(--gold); }
+  .header-status { text-align: right; }
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); display: inline-block; margin-right: 4px; animation: pulse 2s infinite; }
+  .status-text { font-size: 11px; color: var(--success); }
+  .user-info { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+  .btn-logout { background: none; border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px; color: var(--text-muted); font-size: 10px; cursor: pointer; font-family: 'DM Sans', sans-serif; margin-top: 4px; }
+  .btn-logout:hover { border-color: var(--error); color: var(--error); }
+
+  .stats-row { display: flex; gap: 8px; }
+  .stat-card { flex: 1; background: rgba(200,149,108,0.08); border: 1px solid rgba(200,149,108,0.12); border-radius: 10px; padding: 8px 6px; text-align: center; }
+  .stat-icon { font-size: 14px; margin-bottom: 2px; }
+  .stat-value { font-family: 'Playfair Display', serif; font-size: 15px; color: var(--gold); font-weight: 700; }
+  .stat-label { font-size: 9px; color: var(--text-muted); margin-top: 1px; }
+
+  .app-tabs { display: flex; border-bottom: 1px solid var(--border); background: rgba(15,8,6,0.95); }
+  .app-tab { flex: 1; padding: 13px 0; text-align: center; font-size: 11px; cursor: pointer; color: var(--text-muted); border-bottom: 2px solid transparent; transition: all 0.2s; background: none; border-left: none; border-right: none; border-top: none; font-family: 'DM Sans', sans-serif; }
+  .app-tab.active { color: var(--gold); border-bottom-color: var(--gold); font-weight: 600; }
+
+  .app-content { flex: 1; padding: 16px 20px 80px; overflow-y: auto; }
+
+  /* ===== FEED ===== */
+  .search-bar { position: relative; margin-bottom: 14px; }
+  .search-bar input { width: 100%; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px 10px 36px; color: var(--text); font-size: 13px; font-family: 'DM Sans', sans-serif; outline: none; }
+  .search-bar input:focus { border-color: var(--gold); }
+  .search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); font-size: 14px; color: rgba(200,149,108,0.5); }
+  .filter-chips { display: flex; gap: 6px; margin-bottom: 14px; overflow-x: auto; padding-bottom: 2px; }
+  .filter-chips::-webkit-scrollbar { display: none; }
+  .chip { background: rgba(200,149,108,0.1); border: 1px solid rgba(200,149,108,0.2); border-radius: 20px; padding: 5px 14px; font-size: 11px; cursor: pointer; color: var(--text-muted); white-space: nowrap; transition: all 0.2s; font-family: 'DM Sans', sans-serif; }
+  .chip.active { background: var(--gold); border-color: var(--gold); color: #1A0F08; font-weight: 600; }
+
+  .post-card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 16px; margin-bottom: 12px; transition: background 0.2s; cursor: pointer; }
+  .post-card:hover { background: var(--card-hover); }
+  .post-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .avatar { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; color: var(--text); flex-shrink: 0; border: 2px solid rgba(200,149,108,0.3); }
+  .post-name { font-size: 13px; color: var(--text); font-weight: 600; }
+  .post-handle { font-size: 11px; color: rgba(200,149,108,0.7); }
+  .type-badge { background: rgba(200,149,108,0.15); border-radius: 8px; padding: 3px 8px; font-size: 10px; color: var(--gold); margin-left: auto; }
+  .post-thumbnail { width: 100%; height: 160px; border-radius: 10px; object-fit: cover; margin-bottom: 10px; }
+  .post-caption { background: rgba(139,99,64,0.15); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; border-left: 3px solid rgba(200,149,108,0.4); font-size: 12px; color: rgba(255,248,240,0.75); line-height: 1.6; }
+  .ybera-badge { display: inline-flex; align-items: center; gap: 4px; background: rgba(200,149,108,0.2); border-radius: 6px; padding: 2px 8px; font-size: 10px; color: var(--gold); margin-bottom: 10px; }
+  .post-footer { display: flex; align-items: center; gap: 14px; }
+  .post-stat { font-size: 12px; color: var(--text-muted); }
+  .post-date { margin-left: auto; font-size: 10px; color: rgba(200,149,108,0.5); }
+
+  /* ===== AFILIADAS ===== */
+  .section-title { font-family: 'Playfair Display', serif; font-size: 18px; color: var(--text); margin-bottom: 4px; }
+  .section-sub { font-size: 12px; color: rgba(200,149,108,0.6); margin-bottom: 16px; line-height: 1.6; }
+
+  .affiliate-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; margin-bottom: 10px; display: flex; align-items: center; gap: 12px; cursor: pointer; transition: all 0.2s; }
+  .affiliate-card:hover { background: var(--card-hover); border-color: var(--border-hover); }
+  .affiliate-card.selected { background: rgba(200,149,108,0.15); border-color: rgba(200,149,108,0.5); }
+  .affiliate-info { flex: 1; }
+  .affiliate-name { font-size: 14px; color: var(--text); font-weight: 600; margin-bottom: 2px; }
+  .affiliate-handle { font-size: 11px; color: rgba(200,149,108,0.7); margin-bottom: 4px; }
+  .affiliate-stats { display: flex; gap: 10px; }
+  .affiliate-stat { font-size: 10px; color: var(--text-muted); }
+
+  .add-affiliate-btn { width: 100%; background: rgba(200,149,108,0.08); border: 2px dashed rgba(200,149,108,0.3); border-radius: 14px; padding: 16px; cursor: pointer; color: rgba(200,149,108,0.6); font-size: 13px; font-family: 'DM Sans', sans-serif; transition: all 0.2s; margin-top: 4px; }
+  .add-affiliate-btn:hover { border-color: var(--gold); color: var(--gold); }
+
+  /* ===== MODAL ===== */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 100; display: none; align-items: center; justify-content: center; padding: 20px; }
+  .modal-overlay.active { display: flex; }
+  .modal { background: #1A0F08; border: 1px solid var(--border); border-radius: 20px; padding: 28px; width: 100%; max-width: 400px; animation: fadeIn 0.3s ease; }
+  .modal-title { font-family: 'Playfair Display', serif; font-size: 20px; color: var(--text); margin-bottom: 6px; }
+  .modal-sub { font-size: 12px; color: var(--text-muted); margin-bottom: 24px; line-height: 1.6; }
+  .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
+  .btn-secondary { flex: 1; background: rgba(255,248,240,0.05); border: 1px solid var(--border); border-radius: 12px; padding: 12px; color: var(--text-muted); font-size: 13px; font-family: 'DM Sans', sans-serif; cursor: pointer; }
+  .btn-danger { flex: 1; background: rgba(255,107,53,0.15); border: 1px solid rgba(255,107,53,0.3); border-radius: 12px; padding: 12px; color: var(--error); font-size: 13px; font-family: 'DM Sans', sans-serif; cursor: pointer; }
+
+  /* ===== PERFIL ===== */
+  .profile-card { background: rgba(200,149,108,0.08); border: 1px solid rgba(200,149,108,0.2); border-radius: 16px; padding: 20px; margin-bottom: 16px; display: flex; align-items: center; gap: 16px; }
+  .profile-avatar { width: 64px; height: 64px; border-radius: 50%; background: linear-gradient(135deg, var(--gold), var(--gold-dark)); display: flex; align-items: center; justify-content: center; font-family: 'Playfair Display', serif; font-size: 24px; color: var(--text); font-weight: 700; border: 2px solid var(--gold); }
+  .profile-name { font-family: 'Playfair Display', serif; font-size: 20px; color: var(--text); }
+  .profile-email { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+  .profile-badge { display: inline-flex; align-items: center; gap: 4px; background: rgba(76,175,80,0.15); border: 1px solid rgba(76,175,80,0.3); border-radius: 6px; padding: 2px 8px; font-size: 10px; color: var(--success); margin-top: 6px; }
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+  .grid-card { background: rgba(200,149,108,0.08); border: 1px solid rgba(200,149,108,0.15); border-radius: 12px; padding: 16px; text-align: center; }
+  .grid-value { font-family: 'Playfair Display', serif; font-size: 24px; color: var(--gold); font-weight: 700; }
+  .grid-label { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+
+  /* ===== LOADING ===== */
+  .loading-center { display: flex; flex-direction: column; align-items: center; padding: 60px 0; }
+  .spinner { width: 36px; height: 36px; border: 3px solid rgba(200,149,108,0.2); border-top-color: var(--gold); border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 14px; }
+  .loading-text { font-size: 13px; color: var(--text-muted); }
+
+  /* ===== EMPTY STATE ===== */
+  .empty-state { text-align: center; padding: 40px 20px; }
+  .empty-icon { font-size: 40px; margin-bottom: 12px; }
+  .empty-title { font-family: 'Playfair Display', serif; font-size: 18px; color: var(--text); margin-bottom: 6px; }
+  .empty-sub { font-size: 12px; color: var(--text-muted); line-height: 1.6; }
+
+  /* ===== INSTRUCOES TOKEN ===== */
+  .steps-card { background: rgba(200,149,108,0.08); border: 1px solid rgba(200,149,108,0.2); border-radius: 14px; padding: 16px; margin-bottom: 16px; }
+  .step-row { display: flex; gap: 10px; margin-bottom: 10px; align-items: flex-start; }
+  .step-num { width: 22px; height: 22px; border-radius: 50%; background: var(--gold); color: #1A0F08; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .step-text { font-size: 12px; color: rgba(255,248,240,0.7); line-height: 1.6; padding-top: 2px; }
+  .step-text code { background: rgba(200,149,108,0.2); padding: 1px 5px; border-radius: 4px; font-size: 11px; color: var(--gold); }
+
+  .refresh-btn { width: 100%; background: rgba(200,149,108,0.12); border: 1px solid rgba(200,149,108,0.3); border-radius: 12px; padding: 13px; color: var(--gold); font-size: 13px; font-weight: 600; font-family: 'DM Sans', sans-serif; cursor: pointer; transition: all 0.2s; }
+  .refresh-btn:hover { background: rgba(200,149,108,0.2); }
+
+  /* Trial warning */
+  .trial-warning { background: rgba(200,149,108,0.1); border: 1px solid rgba(200,149,108,0.3); border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; font-size: 12px; color: var(--gold); text-align: center; }
+</style>
+</head>
+<body>
+
+<!-- AUTH SCREEN -->
+<div id="auth-screen" class="screen active">
+  <div class="auth-box">
+    <div class="auth-logo">
+      <div class="crown">👑</div>
+      <h1>Monitor <span>Ybera</span></h1>
+      <p>Plataforma para Gestoras</p>
+    </div>
+
+    <div class="trial-badge">✨ 7 dias grátis para testar</div>
+
+    <div class="auth-tabs">
+      <button class="auth-tab active" onclick="switchTab('login')">Entrar</button>
+      <button class="auth-tab" onclick="switchTab('signup')">Cadastrar</button>
+    </div>
+
+    <!-- Login -->
+    <div id="login-form">
+      <div class="form-group">
+        <label>E-mail</label>
+        <input type="email" id="login-email" placeholder="seu@email.com">
+      </div>
+      <div class="form-group">
+        <label>Senha</label>
+        <input type="password" id="login-password" placeholder="••••••••">
+      </div>
+      <button class="btn-primary" onclick="login()">Entrar na plataforma</button>
+    </div>
+
+    <!-- Signup -->
+    <div id="signup-form" style="display:none">
+      <div class="form-group">
+        <label>Seu nome</label>
+        <input type="text" id="signup-nome" placeholder="Maria Silva">
+      </div>
+      <div class="form-group">
+        <label>E-mail</label>
+        <input type="email" id="signup-email" placeholder="seu@email.com">
+      </div>
+      <div class="form-group">
+        <label>Senha</label>
+        <input type="password" id="signup-password" placeholder="Mínimo 6 caracteres">
+      </div>
+      <button class="btn-primary" onclick="signup()">Começar 7 dias grátis</button>
+    </div>
+
+    <div id="auth-msg" class="auth-message"></div>
+  </div>
+</div>
+
+<!-- APP SCREEN -->
+<div id="app-screen" class="screen">
+
+  <!-- Header -->
+  <div class="app-header">
+    <div class="header-top">
+      <div class="header-brand">
+        <div class="label">Monitoramento</div>
+        <h1>Ybera <span>Afiliadas</span></h1>
+      </div>
+      <div class="header-status">
+        <div>
+          <span class="status-dot"></span>
+          <span class="status-text" id="conn-status">Conectando…</span>
+        </div>
+        <div class="user-info" id="user-email-display"></div>
+        <button class="btn-logout" onclick="logout()">Sair</button>
+      </div>
+    </div>
+    <div class="stats-row">
+      <div class="stat-card"><div class="stat-icon">👑</div><div class="stat-value" id="stat-afiliadas">0</div><div class="stat-label">Afiliadas</div></div>
+      <div class="stat-card"><div class="stat-icon">📸</div><div class="stat-value" id="stat-posts">0</div><div class="stat-label">Posts</div></div>
+      <div class="stat-card"><div class="stat-icon">♥</div><div class="stat-value" id="stat-likes">0</div><div class="stat-label">Curtidas</div></div>
+      <div class="stat-card"><div class="stat-icon">✦</div><div class="stat-value" id="stat-ybera">0</div><div class="stat-label">Ybera</div></div>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="app-tabs">
+    <button class="app-tab active" onclick="switchAppTab('feed')">◼ Feed</button>
+    <button class="app-tab" onclick="switchAppTab('afiliadas')">👑 Afiliadas</button>
+    <button class="app-tab" onclick="switchAppTab('perfil')">⚙ Perfil</button>
+  </div>
+
+  <!-- Content -->
+  <div class="app-content">
+
+    <!-- FEED TAB -->
+    <div id="tab-feed">
+      <div class="search-bar">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="search-input" placeholder="Buscar nas legendas…" oninput="filterPosts()">
+      </div>
+      <div class="filter-chips">
+        <button class="chip active" onclick="setFilter('all', this)">Todos</button>
+        <button class="chip" onclick="setFilter('IMAGE', this)">Fotos</button>
+        <button class="chip" onclick="setFilter('VIDEO', this)">Vídeos</button>
+        <button class="chip" onclick="setFilter('CAROUSEL_ALBUM', this)">Carrossel</button>
+      </div>
+      <div id="posts-container">
+        <div class="loading-center"><div class="spinner"></div><div class="loading-text">Carregando posts…</div></div>
+      </div>
+    </div>
+
+    <!-- AFILIADAS TAB -->
+    <div id="tab-afiliadas" style="display:none">
+      <div class="section-title">Suas Afiliadas</div>
+      <div class="section-sub">Adicione as afiliadas que você quer monitorar. Cada uma precisa te enviar o token do Instagram.</div>
+      <div id="affiliates-list"></div>
+      <button class="add-affiliate-btn" onclick="openAddModal()">+ Adicionar Afiliada</button>
+
+      <div style="margin-top: 24px;">
+        <div class="section-title" style="font-size:15px; margin-bottom:8px;">Como obter o token?</div>
+        <div class="steps-card">
+          <div class="step-row"><div class="step-num">1</div><div class="step-text">A afiliada acessa <code>developers.facebook.com</code></div></div>
+          <div class="step-row"><div class="step-num">2</div><div class="step-text">Vai em API do Instagram → Configuração → Gerar tokens</div></div>
+          <div class="step-row"><div class="step-num">3</div><div class="step-text">Adiciona a conta do Instagram dela e clica em <code>Gerar token</code></div></div>
+          <div class="step-row" style="margin-bottom:0"><div class="step-num">4</div><div class="step-text">Copia o token e envia para você adicionar aqui</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PERFIL TAB -->
+    <div id="tab-perfil" style="display:none">
+      <div class="profile-card">
+        <div class="profile-avatar" id="profile-avatar">?</div>
+        <div>
+          <div class="profile-name" id="profile-name">Carregando…</div>
+          <div class="profile-email" id="profile-email-text"></div>
+          <div class="profile-badge">✅ Conta ativa</div>
+        </div>
+      </div>
+      <div class="stats-grid">
+        <div class="grid-card"><div class="grid-value" id="p-afiliadas">0</div><div class="grid-label">Afiliadas</div></div>
+        <div class="grid-card"><div class="grid-value" id="p-posts">0</div><div class="grid-label">Posts monit.</div></div>
+        <div class="grid-card"><div class="grid-value" id="p-likes">0</div><div class="grid-label">Curtidas totais</div></div>
+        <div class="grid-card"><div class="grid-value" id="p-ybera">0</div><div class="grid-label">Menções Ybera</div></div>
+      </div>
+      <button class="refresh-btn" onclick="loadAllData()">🔄 Atualizar dados</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL ADD AFFILIATE -->
+<div id="add-modal" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-title">Adicionar Afiliada</div>
+    <div class="modal-sub">Preencha os dados da afiliada e cole o token do Instagram dela.</div>
+    <div class="form-group">
+      <label>Nome da afiliada</label>
+      <input type="text" id="aff-nome" placeholder="Ex: Ana Beatriz">
+    </div>
+    <div class="form-group">
+      <label>@ do Instagram</label>
+      <input type="text" id="aff-handle" placeholder="@anabeatriz.hair">
+    </div>
+    <div class="form-group">
+      <label>Token de acesso do Instagram</label>
+      <input type="text" id="aff-token" placeholder="IGAA...">
+    </div>
+    <div id="modal-msg" class="auth-message"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeAddModal()">Cancelar</button>
+      <button class="btn-primary" style="margin-top:0" onclick="addAffiliate()">Adicionar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL DELETE AFFILIATE -->
+<div id="delete-modal" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-title">Remover Afiliada</div>
+    <div class="modal-sub" id="delete-modal-sub">Tem certeza que deseja remover esta afiliada?</div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeDeleteModal()">Cancelar</button>
+      <button class="btn-danger" onclick="confirmDelete()">Remover</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://oieodcwamhzivhhvphuq.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9pZW9kY3dhbWh6aXZoaHZwaHVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MzgxODgsImV4cCI6MjA5NTMxNDE4OH0.sH76OvUaVpROVgs3iMgqkyyxJPAUCzGeY4-KWMe-3aU';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let currentUser = null;
+let allAffiliates = [];
+let allPosts = [];
+let currentFilter = 'all';
+let deleteTargetId = null;
+
+// ===== AUTH =====
+function switchTab(tab) {
+  document.querySelectorAll('.auth-tab').forEach((t,i) => t.classList.toggle('active', (i===0&&tab==='login')||(i===1&&tab==='signup')));
+  document.getElementById('login-form').style.display = tab==='login' ? 'block' : 'none';
+  document.getElementById('signup-form').style.display = tab==='signup' ? 'block' : 'none';
+  document.getElementById('auth-msg').className = 'auth-message';
+}
+
+function showMsg(id, msg, type) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.className = 'auth-message ' + type;
+}
+
+async function login() {
+  const email = document.getElementById('login-email').value.trim();
+  const pass = document.getElementById('login-password').value;
+  if (!email || !pass) return showMsg('auth-msg', 'Preencha todos os campos.', 'error');
+  const btn = document.querySelector('#login-form .btn-primary');
+  btn.disabled = true; btn.textContent = 'Entrando…';
+  const { error } = await sb.auth.signInWithPassword({ email, password: pass });
+  btn.disabled = false; btn.textContent = 'Entrar na plataforma';
+  if (error) showMsg('auth-msg', error.message, 'error');
+}
+
+async function signup() {
+  const nome = document.getElementById('signup-nome').value.trim();
+  const email = document.getElementById('signup-email').value.trim();
+  const pass = document.getElementById('signup-password').value;
+  if (!nome || !email || !pass) return showMsg('auth-msg', 'Preencha todos os campos.', 'error');
+  if (pass.length < 6) return showMsg('auth-msg', 'Senha precisa ter pelo menos 6 caracteres.', 'error');
+  const btn = document.querySelector('#signup-form .btn-primary');
+  btn.disabled = true; btn.textContent = 'Criando conta…';
+  const { error } = await sb.auth.signUp({ email, password: pass, options: { data: { nome } } });
+  btn.disabled = false; btn.textContent = 'Começar 7 dias grátis';
+  if (error) showMsg('auth-msg', error.message, 'error');
+  else showMsg('auth-msg', '✅ Conta criada! Verifique seu e-mail para confirmar.', 'success');
+}
+
+async function logout() {
+  await sb.auth.signOut();
+  currentUser = null; allAffiliates = []; allPosts = [];
+  document.getElementById('app-screen').classList.remove('active');
+  document.getElementById('auth-screen').classList.add('active');
+}
+
+// ===== SESSION =====
+sb.auth.onAuthStateChange(async (event, session) => {
+  if (session?.user) {
+    currentUser = session.user;
+    document.getElementById('auth-screen').classList.remove('active');
+    document.getElementById('app-screen').classList.add('active');
+    document.getElementById('user-email-display').textContent = currentUser.email;
+    await loadAllData();
+  }
+});
+
+// ===== DATA =====
+async function loadAllData() {
+  document.getElementById('conn-status').textContent = 'Carregando…';
+  await loadAffiliates();
+  await fetchAllPosts();
+  document.getElementById('conn-status').textContent = 'Ao vivo';
+  updateStats();
+  updateProfile();
+}
+
+async function loadAffiliates() {
+  const { data, error } = await sb.from('afiliadas').select('*').eq('ativo', true).order('criado_em');
+  if (!error) allAffiliates = data || [];
+  renderAffiliates();
+}
+
+async function fetchAllPosts() {
+  allPosts = [];
+  document.getElementById('posts-container').innerHTML = '<div class="loading-center"><div class="spinner"></div><div class="loading-text">Buscando posts das afiliadas…</div></div>';
+
+  if (allAffiliates.length === 0) {
+    document.getElementById('posts-container').innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">👑</div>
+        <div class="empty-title">Nenhuma afiliada ainda</div>
+        <div class="empty-sub">Adicione suas afiliadas na aba "Afiliadas" para começar a monitorar os posts delas.</div>
+      </div>`;
+    return;
+  }
+
+  for (const aff of allAffiliates) {
+    try {
+      const r = await fetch(`https://oieodcwamhzivhhvphuq.supabase.co/functions/v1/instagram-proxy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_KEY}` },
+        body: JSON.stringify({ token: aff.token, path: `me/media?fields=id,caption,media_type,like_count,comments_count,timestamp,media_url,thumbnail_url&limit=10` })
+      });
+      const data = await r.json();
+      if (data.data) {
+        data.data.forEach(p => allPosts.push({ ...p, affiliate: aff }));
+      }
+    } catch(e) { console.log('Erro ao buscar posts de', aff.nome); }
+  }
+
+  allPosts.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
+  renderPosts();
+}
+
+function renderPosts() {
+  const search = document.getElementById('search-input')?.value?.toLowerCase() || '';
+  const filtered = allPosts.filter(p => {
+    if (currentFilter !== 'all' && p.media_type !== currentFilter) return false;
+    if (search && !(p.caption||'').toLowerCase().includes(search)) return false;
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    document.getElementById('posts-container').innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><div class="empty-title">Nenhum post encontrado</div></div>';
+    return;
+  }
+
+  document.getElementById('posts-container').innerHTML = filtered.map(post => {
+    const aff = post.affiliate;
+    const hasYbera = /ybera/i.test(post.caption||'');
+    const date = post.timestamp ? new Date(post.timestamp).toLocaleDateString('pt-BR',{day:'2-digit',month:'short'}) : '';
+    const caption = (post.caption||'Sem legenda').slice(0,130);
+    const typeLabel = {VIDEO:'▶ Vídeo', IMAGE:'◼ Foto', CAROUSEL_ALBUM:'❏ Carrossel'}[post.media_type]||post.media_type;
+    const img = post.thumbnail_url||post.media_url;
+    return `
+      <div class="post-card">
+        <div class="post-header">
+          <div class="avatar" style="background:linear-gradient(135deg,${aff.cor||'#C8956C'},${aff.cor||'#C8956C'}88)">${aff.avatar||aff.nome.slice(0,2).toUpperCase()}</div>
+          <div><div class="post-name">${aff.nome}</div><div class="post-handle">${aff.handle||''}</div></div>
+          <div class="type-badge">${typeLabel}</div>
+        </div>
+        ${img?'<img src="'+img+'" class="post-thumbnail" onerror="this.style.display=\'none\'">'  :''}
+        <div class="post-caption">${caption}${post.caption&&post.caption.length>130?'...':''}</div>
+        ${hasYbera?'<div class="ybera-badge">✓ Menciona Ybera</div>':''}
+        <div class="post-footer">
+          <span class="post-stat">♡ ${post.like_count||0}</span>
+          <span class="post-stat">💬 ${post.comments_count||0}</span>
+          <span class="post-date">${date}</span>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function renderAffiliates() {
+  const container = document.getElementById('affiliates-list');
+  if (allAffiliates.length === 0) {
+    container.innerHTML = '';
+    return;
+  }
+  container.innerHTML = allAffiliates.map(aff => `
+    <div class="affiliate-card">
+      <div class="avatar" style="background:linear-gradient(135deg,${aff.cor||'#C8956C'},${aff.cor||'#C8956C'}88);width:44px;height:44px;font-size:14px">${aff.avatar||aff.nome.slice(0,2).toUpperCase()}</div>
+      <div class="affiliate-info">
+        <div class="affiliate-name">${aff.nome}</div>
+        <div class="affiliate-handle">${aff.handle||'Instagram'}</div>
+        <div class="affiliate-stats">
+          <span class="affiliate-stat">📸 ${allPosts.filter(p=>p.affiliate?.id===aff.id).length} posts</span>
+        </div>
+      </div>
+      <button onclick="openDeleteModal('${aff.id}','${aff.nome}')" style="background:none;border:none;cursor:pointer;color:rgba(255,107,53,0.5);font-size:16px;padding:4px">🗑</button>
+    </div>`).join('');
+}
+
+function updateStats() {
+  const totalLikes = allPosts.reduce((s,p)=>s+(p.like_count||0),0);
+  const yberaMentions = allPosts.filter(p=>/ybera/i.test(p.caption||'')).length;
+  const fmt = n => n>999?(n/1000).toFixed(1)+'K':n;
+  document.getElementById('stat-afiliadas').textContent = allAffiliates.length;
+  document.getElementById('stat-posts').textContent = allPosts.length;
+  document.getElementById('stat-likes').textContent = fmt(totalLikes);
+  document.getElementById('stat-ybera').textContent = yberaMentions;
+}
+
+function updateProfile() {
+  if (!currentUser) return;
+  const nome = currentUser.user_metadata?.nome || currentUser.email?.split('@')[0] || '?';
+  document.getElementById('profile-name').textContent = nome;
+  document.getElementById('profile-email-text').textContent = currentUser.email;
+  document.getElementById('profile-avatar').textContent = nome.slice(0,1).toUpperCase();
+  const totalLikes = allPosts.reduce((s,p)=>s+(p.like_count||0),0);
+  const yberaMentions = allPosts.filter(p=>/ybera/i.test(p.caption||'')).length;
+  const fmt = n => n>999?(n/1000).toFixed(1)+'K':n;
+  document.getElementById('p-afiliadas').textContent = allAffiliates.length;
+  document.getElementById('p-posts').textContent = allPosts.length;
+  document.getElementById('p-likes').textContent = fmt(totalLikes);
+  document.getElementById('p-ybera').textContent = yberaMentions;
+}
+
+// ===== FILTERS =====
+function setFilter(f, el) {
+  currentFilter = f;
+  document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  renderPosts();
+}
+
+function filterPosts() { renderPosts(); }
+
+// ===== TABS =====
+function switchAppTab(tab) {
+  ['feed','afiliadas','perfil'].forEach(t => {
+    document.getElementById('tab-'+t).style.display = t===tab?'block':'none';
+  });
+  document.querySelectorAll('.app-tab').forEach((t,i) => {
+    t.classList.toggle('active', ['feed','afiliadas','perfil'][i]===tab);
+  });
+}
+
+// ===== MODALS =====
+function openAddModal() {
+  document.getElementById('aff-nome').value='';
+  document.getElementById('aff-handle').value='';
+  document.getElementById('aff-token').value='';
+  document.getElementById('modal-msg').className='auth-message';
+  document.getElementById('add-modal').classList.add('active');
+}
+function closeAddModal() { document.getElementById('add-modal').classList.remove('active'); }
+
+async function addAffiliate() {
+  const nome = document.getElementById('aff-nome').value.trim();
+  const handle = document.getElementById('aff-handle').value.trim();
+  const token = document.getElementById('aff-token').value.trim();
+  if (!nome||!token) return showMsg('modal-msg','Preencha o nome e o token.','error');
+  const btn = document.querySelector('#add-modal .btn-primary');
+  btn.disabled=true; btn.textContent='Verificando token…';
+  try {
+    const r = await fetch(`https://oieodcwamhzivhhvphuq.supabase.co/functions/v1/instagram-proxy`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_KEY}` },
+      body: JSON.stringify({ token: token, path: `me?fields=id,username` })
+    });
+    const data = await r.json();
+    if (data.error) { showMsg('modal-msg','Token inválido: '+data.error.message,'error'); btn.disabled=false; btn.textContent='Adicionar'; return; }
+    const { error } = await sb.from('afiliadas').insert({ gestora_id: currentUser.id, nome, handle: handle||('@'+data.username), instagram_id: data.id, token, avatar: nome.slice(0,2).toUpperCase() });
+    if (error) { showMsg('modal-msg','Erro ao salvar: '+error.message,'error'); btn.disabled=false; btn.textContent='Adicionar'; return; }
+    closeAddModal();
+    await loadAllData();
+  } catch(e) { showMsg('modal-msg','Erro de conexão. Verifique o token.','error'); }
+  btn.disabled=false; btn.textContent='Adicionar';
+}
+
+function openDeleteModal(id, nome) {
+  deleteTargetId = id;
+  document.getElementById('delete-modal-sub').textContent = `Tem certeza que deseja remover "${nome}"?`;
+  document.getElementById('delete-modal').classList.add('active');
+}
+function closeDeleteModal() { document.getElementById('delete-modal').classList.remove('active'); deleteTargetId=null; }
+
+async function confirmDelete() {
+  if (!deleteTargetId) return;
+  await sb.from('afiliadas').update({ativo:false}).eq('id',deleteTargetId);
+  closeDeleteModal();
+  await loadAllData();
+}
+
+// Check session on load
+sb.auth.getSession().then(({data:{session}}) => {
+  if (!session) {
+    document.getElementById('auth-screen').classList.add('active');
+  }
+});
+</script>
+</body>
+</html>
